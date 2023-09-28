@@ -1,0 +1,160 @@
+name: EKS DEPLOYMENT
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: 'Configuration JSON'
+        required: true
+        type: string
+
+    secrets:
+      ARGOCD_TOKEN:
+        required: true
+        description: 'ArgoCD token'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    runs-on: ubuntu-latest
+    name: Build, push and deploy to EKS
+
+    steps:
+      - name: Process inputs
+        id: inputs
+        run: |
+          # Extract the service configuration from the input
+          IMAGE_VALUES_REPOSITORY=${{ fromJson(inputs.config).IMAGE_VALUES_REPOSITORY }}
+          IMAGE_VALUES_BRANCH=${{ fromJson(inputs.config).IMAGE_VALUES_BRANCH }}
+          IMAGE_VALUES_FILE=${{ fromJson(inputs.config).IMAGE_VALUES_FILE }}
+          IMAGE_YAML_PATH=${{ fromJson(inputs.config).IMAGE_YAML_PATH }}
+          ARGOCD_URL=${{ fromJson(inputs.config).ARGOCD_URL }}
+          ARGOCD_APP=${{ fromJson(inputs.config).ARGOCD_APP }}
+          AWS_REGION=${{ fromJson(inputs.config).AWS_REGION }}
+          AWS_ROLE=${{ fromJson(inputs.config).AWS_ROLE }}
+          REPOSITORY=${{ fromJson(inputs.config).REPOSITORY }}
+          REPOSITORY_URL=${{ fromJson(inputs.config).REPOSITORY_URL }}
+          DOCKER_CONTEXT=${{ fromJson(inputs.config).DOCKER_CONTEXT }}
+          DOCKER_FILE=${{ fromJson(inputs.config).DOCKER_FILE }}
+          SLACK_WEBHOOK_URL=${{ fromJson(inputs.config).SLACK_WEBHOOK_URL }}
+
+          # Check required values
+          [ -z "$IMAGE_VALUES_REPOSITORY" ] && echo "IMAGE_VALUES_REPOSITORY is not set" && exit 1;
+          [ -z "$IMAGE_VALUES_FILE" ] && echo "IMAGE_VALUES_FILE is not set" && exit 1;
+          [ -z "$ARGOCD_URL" ] && echo "ARGOCD_URL is not set" && exit 1;
+          [ -z "$ARGOCD_APP" ] && echo "ARGOCD_APP is not set" && exit 1;
+          [ -z "$AWS_REGION" ] && echo "AWS_REGION is not set" && exit 1;
+          [ -z "$AWS_ROLE" ] && echo "AWS_ROLE is not set" && exit 1;
+          [ -z "$REPOSITORY" ] && echo "REPOSITORY is not set" && exit 1;
+          [ -z "$REPOSITORY_URL" ] && echo "REPOSITORY_URL is not set" && exit 1;
+          
+          # Set defaults
+          [ -z "$IMAGE_VALUES_BRANCH" ] && IMAGE_VALUES_BRANCH="main"   
+          [ -z "$IMAGE_YAML_PATH" ] && IMAGE_YAML_PATH=".image.tag"
+          [ -z "$DOCKER_CONTEXT" ] && DOCKER_CONTEXT="."
+          [ -z "$DOCKER_FILE" ] && DOCKER_FILE="Dockerfile"
+
+          # Set the environment variables
+          echo "IMAGE_VALUES_REPOSITORY=$IMAGE_VALUES_REPOSITORY" >> $GITHUB_ENV
+          echo "IMAGE_VALUES_BRANCH=$IMAGE_VALUES_BRANCH" >> $GITHUB_ENV
+          echo "IMAGE_VALUES_FILE=$IMAGE_VALUES_FILE" >> $GITHUB_ENV
+          echo "IMAGE_YAML_PATH=$IMAGE_YAML_PATH" >> $GITHUB_ENV
+          echo "ARGOCD_URL=$ARGOCD_URL" >> $GITHUB_ENV
+          echo "ARGOCD_APP=$ARGOCD_APP" >> $GITHUB_ENV
+          echo "AWS_REGION=$AWS_REGION" >> $GITHUB_ENV
+          echo "AWS_ROLE=$AWS_ROLE" >> $GITHUB_ENV
+          echo "REPOSITORY=$REPOSITORY" >> $GITHUB_ENV
+          echo "REPOSITORY_URL=$REPOSITORY_URL" >> $GITHUB_ENV
+          echo "DOCKER_CONTEXT=$DOCKER_CONTEXT" >> $GITHUB_ENV
+          echo "DOCKER_FILE=$DOCKER_FILE" >> $GITHUB_ENV
+          echo "SLACK_WEBHOOK_URL=$SLACK_WEBHOOK_URL" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v3
+
+      - name: Checkout
+        uses: actions/checkout@v4        
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE }}
+          role-duration-seconds: 900 # the minimum
+          role-session-name: GithubDeployer@${{ github.actor }}
+
+      - name: Login to ECR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REPOSITORY }}
+
+      - name: "Set build id"
+        id: version  # this is used on variable path  
+        run: |
+          echo "builddate=$(date +'%Y-%m-%d')-${GITHUB_RUN_ATTEMPT}-$(echo ${GITHUB_SHA::7})" >> $GITHUB_OUTPUT
+        
+      - name: Build and push Docker images
+        id: docker
+        uses: docker/build-push-action@v4.2.1    
+        with:
+          push: true
+          context: ${{ env.DOCKER_CONTEXT }}
+          tags: ${{ env.REPOSITORY_URL }}:${{ steps.version.outputs.builddate }}
+          file: ${{ env.DOCKER_FILE }}
+
+      - name: Update yaml and push
+        uses: rusowyler/github-action-yaml-update-and-push@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          yq-version: "v4.20.2"
+          yaml-file: ${{ env.IMAGE_VALUES_FILE }}
+          yaml-path: ${{ env.IMAGE_YAML_PATH }}
+          yaml-value: ${{ steps.version.outputs.builddate }}
+          repository-username: ${{ github.repository_owner }}
+          repository-name: ${{ env.IMAGE_VALUES_REPOSITORY }}
+          branch: ${{ env.IMAGE_VALUES_BRANCH }}
+          user-email: "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync ArgoCD Application
+        uses: omegion/argocd-actions@v1
+        with:
+          address: ${{ inputs.argocd_url }}
+          token: ${{ secrets.ARGOCD_TOKEN }}
+          action: sync
+          appName: ${{ env.ARGOCD_APP }}
+  
+      - name: Slack Notification Success
+        uses: rtCamp/action-slack-notify@v2
+        if: ${{ success() && env.SLACK_WEBHOOK != '' }}
+        env:
+          SLACK_USERNAME: DEPLOYER
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_ICON: https://avatars.githubusercontent.com/u/86502718?s=96&v=4
+          SLACK_MESSAGE: |
+            • *APP:* ${{ env.ARGOCD_APP }}
+            • *IMAGE:* ${{ steps.version.outputs.builddate }}
+          SLACK_TITLE: 'SUCCESSFUL ARGO APP UPDATE - ${{ env.ARGOCD_APP }} :rocket:'
+          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
+
+      - name: Slack Notification Failure
+        uses: rtCamp/action-slack-notify@v2
+        if: ${{ failure() && env.SLACK_WEBHOOK != '' }}
+        env:
+          SLACK_USERNAME: DEPLOYER
+          SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
+          SLACK_ICON: https://avatars.githubusercontent.com/u/86502718?s=96&v=4
+          SLACK_MESSAGE: |
+            • *APP:* ${{ env.ARGOCD_APP }}
+            • *IMAGE:* ${{ steps.version.outputs.builddate }}
+          SLACK_TITLE: ':warning: :warning: WORFLOW FAILED - ${{ env.ARGOCD_APP }}'
+          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
