@@ -11,14 +11,11 @@ on:
     secrets:
       ARGOCD_TOKEN:
         required: true
-        description: 'ArgoCD token'
-      GITHUB_TOKEN:
-        required: true
-        description: 'Github token'
+        description: 'ArgoCD token'      
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   deploy:
