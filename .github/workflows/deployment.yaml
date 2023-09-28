@@ -21,7 +21,7 @@ jobs:
   deploy:
     if: "!contains(github.event.head_commit.message, 'skip ci')"
     runs-on: ubuntu-latest
-    name: Build, push and deploy to EKS
+    name: EKS - Build, push, deploy
 
     steps:
       - name: Process inputs
@@ -59,19 +59,19 @@ jobs:
           [ -z "$DOCKER_FILE" ] && DOCKER_FILE="Dockerfile"
 
           # Set the environment variables
-          echo "IMAGE_VALUES_REPOSITORY=$IMAGE_VALUES_REPOSITORY" >> $GITHUB_ENV
-          echo "IMAGE_VALUES_BRANCH=$IMAGE_VALUES_BRANCH" >> $GITHUB_ENV
-          echo "IMAGE_VALUES_FILE=$IMAGE_VALUES_FILE" >> $GITHUB_ENV
-          echo "IMAGE_YAML_PATH=$IMAGE_YAML_PATH" >> $GITHUB_ENV
-          echo "ARGOCD_URL=$ARGOCD_URL" >> $GITHUB_ENV
-          echo "ARGOCD_APP=$ARGOCD_APP" >> $GITHUB_ENV
-          echo "AWS_REGION=$AWS_REGION" >> $GITHUB_ENV
-          echo "AWS_ROLE=$AWS_ROLE" >> $GITHUB_ENV
-          echo "REPOSITORY=$REPOSITORY" >> $GITHUB_ENV
-          echo "REPOSITORY_URL=$REPOSITORY_URL" >> $GITHUB_ENV
-          echo "DOCKER_CONTEXT=$DOCKER_CONTEXT" >> $GITHUB_ENV
-          echo "DOCKER_FILE=$DOCKER_FILE" >> $GITHUB_ENV
-          echo "SLACK_WEBHOOK_URL=$SLACK_WEBHOOK_URL" >> $GITHUB_ENV
+          echo "IMAGE_VALUES_REPOSITORY=$IMAGE_VALUES_REPOSITORY" >> $GITHUB_OUTPUT
+          echo "IMAGE_VALUES_BRANCH=$IMAGE_VALUES_BRANCH" >> $GITHUB_OUTPUT
+          echo "IMAGE_VALUES_FILE=$IMAGE_VALUES_FILE" >> $GITHUB_OUTPUT
+          echo "IMAGE_YAML_PATH=$IMAGE_YAML_PATH" >> $GITHUB_OUTPUT
+          echo "ARGOCD_URL=$ARGOCD_URL" >> $GITHUB_OUTPUT
+          echo "ARGOCD_APP=$ARGOCD_APP" >> $GITHUB_OUTPUT
+          echo "AWS_REGION=$AWS_REGION" >> $GITHUB_OUTPUT
+          echo "AWS_ROLE=$AWS_ROLE" >> $GITHUB_OUTPUT
+          echo "REPOSITORY=$REPOSITORY" >> $GITHUB_OUTPUT
+          echo "REPOSITORY_URL=$REPOSITORY_URL" >> $GITHUB_OUTPUT
+          echo "DOCKER_CONTEXT=$DOCKER_CONTEXT" >> $GITHUB_OUTPUT
+          echo "DOCKER_FILE=$DOCKER_FILE" >> $GITHUB_OUTPUT
+          echo "SLACK_WEBHOOK_URL=$SLACK_WEBHOOK_URL" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v3
 
@@ -87,15 +87,15 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ env.AWS_ROLE }}
+          aws-region: ${{ steps.inputs.outputs.AWS_REGION }}
+          role-to-assume: ${{ steps.inputs.outputs.AWS_ROLE }}
           role-duration-seconds: 900 # the minimum
           role-session-name: GithubDeployer@${{ github.actor }}
 
       - name: Login to ECR
         uses: docker/login-action@v2
         with:
-          registry: ${{ env.REPOSITORY }}
+          registry: ${{ steps.inputs.outputs.REPOSITORY }}
 
       - name: "Set build id"
         id: version  # this is used on variable path  
@@ -107,9 +107,9 @@ jobs:
         uses: docker/build-push-action@v4.2.1    
         with:
           push: true
-          context: ${{ env.DOCKER_CONTEXT }}
-          tags: ${{ env.REPOSITORY_URL }}:${{ steps.version.outputs.builddate }}
-          file: ${{ env.DOCKER_FILE }}
+          context: ${{ steps.inputs.outputs.DOCKER_CONTEXT }}
+          tags: ${{ steps.inputs.outputs.REPOSITORY_URL }}:${{ steps.version.outputs.builddate }}
+          file: ${{ steps.inputs.outputs.DOCKER_FILE }}
 
       - name: Update yaml and push
         uses: rusowyler/github-action-yaml-update-and-push@main
@@ -117,21 +117,21 @@ jobs:
           API_TOKEN_GITHUB: ${{ secrets.GITHUB_TOKEN }}
         with:
           yq-version: "v4.20.2"
-          yaml-file: ${{ env.IMAGE_VALUES_FILE }}
-          yaml-path: ${{ env.IMAGE_YAML_PATH }}
+          yaml-file: ${{ steps.inputs.outputs.IMAGE_VALUES_FILE }}
+          yaml-path: ${{ steps.inputs.outputs.IMAGE_YAML_PATH }}
           yaml-value: ${{ steps.version.outputs.builddate }}
           repository-username: ${{ github.repository_owner }}
-          repository-name: ${{ env.IMAGE_VALUES_REPOSITORY }}
-          branch: ${{ env.IMAGE_VALUES_BRANCH }}
+          repository-name: ${{ steps.inputs.outputs.IMAGE_VALUES_REPOSITORY }}
+          branch: ${{ steps.inputs.outputs.IMAGE_VALUES_BRANCH }}
           user-email: "github-actions[bot]@users.noreply.github.com"
 
       - name: Sync ArgoCD Application
         uses: omegion/argocd-actions@v1
         with:
-          address: ${{ inputs.argocd_url }}
+          address: ${{ steps.inputs.outputs.ARGOCD_URL }}
           token: ${{ secrets.ARGOCD_TOKEN }}
           action: sync
-          appName: ${{ env.ARGOCD_APP }}
+          appName: ${{ steps.inputs.outputs.ARGOCD_APP }}
   
       - name: Slack Notification Success
         uses: rtCamp/action-slack-notify@v2
@@ -141,10 +141,10 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_ICON: https://avatars.githubusercontent.com/u/86502718?s=96&v=4
           SLACK_MESSAGE: |
-            • *APP:* ${{ env.ARGOCD_APP }}
+            • *APP:* ${{ steps.inputs.outputs.ARGOCD_APP }}
             • *IMAGE:* ${{ steps.version.outputs.builddate }}
-          SLACK_TITLE: 'SUCCESSFUL ARGO APP UPDATE - ${{ env.ARGOCD_APP }} :rocket:'
-          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
+          SLACK_TITLE: 'SUCCESSFUL ARGO APP UPDATE - ${{ steps.inputs.outputs.ARGOCD_APP }} :rocket:'
+          SLACK_WEBHOOK: ${{ steps.inputs.outputs.SLACK_WEBHOOK_URL }}
 
       - name: Slack Notification Failure
         uses: rtCamp/action-slack-notify@v2
@@ -154,7 +154,7 @@ jobs:
           SLACK_COLOR: ${{ job.status }} # or a specific color like 'good' or '#ff00ff'
           SLACK_ICON: https://avatars.githubusercontent.com/u/86502718?s=96&v=4
           SLACK_MESSAGE: |
-            • *APP:* ${{ env.ARGOCD_APP }}
+            • *APP:* ${{ steps.inputs.outputs.ARGOCD_APP }}
             • *IMAGE:* ${{ steps.version.outputs.builddate }}
-          SLACK_TITLE: ':warning: :warning: WORFLOW FAILED - ${{ env.ARGOCD_APP }}'
-          SLACK_WEBHOOK: ${{ env.SLACK_WEBHOOK_URL }}
+          SLACK_TITLE: ':warning: :warning: WORFLOW FAILED - ${{ steps.inputs.outputs.ARGOCD_APP }}'
+          SLACK_WEBHOOK: ${{ steps.inputs.outputs.SLACK_WEBHOOK_URL }}
