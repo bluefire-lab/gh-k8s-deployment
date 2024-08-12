@@ -108,7 +108,6 @@ jobs:
           context: ${{ steps.inputs.outputs.DOCKER_CONTEXT }}
           tags: ${{ steps.inputs.outputs.REPOSITORY_URL }}:${{ steps.version.outputs.builddate }}
           file: ${{ steps.inputs.outputs.DOCKER_FILE }}
-          platforms: linux/amd64,linux/arm64
 
       - name: Update yaml and push
         uses: rusowyler/github-action-yaml-update-and-push@main
