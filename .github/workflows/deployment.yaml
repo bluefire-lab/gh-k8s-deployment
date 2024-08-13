@@ -108,6 +108,8 @@ jobs:
           context: ${{ steps.inputs.outputs.DOCKER_CONTEXT }}
           tags: ${{ steps.inputs.outputs.REPOSITORY_URL }}:${{ steps.version.outputs.builddate }}
           file: ${{ steps.inputs.outputs.DOCKER_FILE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Update yaml and push
         uses: rusowyler/github-action-yaml-update-and-push@main
