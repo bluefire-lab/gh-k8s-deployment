@@ -7,6 +7,11 @@ on:
         description: 'Configuration JSON'
         required: true
         type: string
+      login-to-ghcr:
+        description: 'Login to GHCR'
+        required: false
+        default: false
+        type: boolean
 
     secrets:
       ARGOCD_TOKEN:
@@ -16,10 +21,10 @@ on:
 permissions:
   id-token: write
   contents: write
+  packages: read
 
 jobs:
   deploy:
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
     runs-on: ubuntu-latest
     name: EKS - Build, push, deploy
 
@@ -89,6 +94,14 @@ jobs:
           role-to-assume: ${{ steps.inputs.outputs.AWS_ROLE }}
           role-duration-seconds: 900 # the minimum
           role-session-name: GithubDeployer@${{ github.actor }}
+
+      - name: Login to GHCR
+        if: ${{ steps.inputs.outputs.login-to-ghcr == true }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to ECR
         uses: docker/login-action@v3
