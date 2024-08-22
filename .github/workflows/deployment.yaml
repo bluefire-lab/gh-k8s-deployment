@@ -21,7 +21,7 @@ on:
 permissions:
   id-token: write
   contents: write
-  packages: read
+  #packages: read This needs to be inherited from the caller
 
 jobs:
   deploy:
