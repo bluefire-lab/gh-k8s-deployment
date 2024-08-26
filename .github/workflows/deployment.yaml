@@ -22,7 +22,7 @@ jobs:
   deploy:
     if: ${{ !inputs.login-to-ghcr }}
     runs-on: ubuntu-latest
-    name: EKS - Build, push, deploy
+    name: Build, push, deploy
     permissions:
       id-token: write
       contents: write
@@ -173,7 +173,7 @@ jobs:
   deploy-ghcr:
     if: ${{ inputs.login-to-ghcr }}
     runs-on: ubuntu-latest
-    name: EKS - Build, push, deploy
+    name: Build, push, deploy with GHCR
     permissions:
       id-token: write
       contents: write
