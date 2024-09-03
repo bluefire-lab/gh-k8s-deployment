@@ -19,13 +19,14 @@ on:
         description: 'ArgoCD token'      
 
 jobs:
-  deploy:
-    if: ${{ !inputs.login-to-ghcr }}
+  deploy-ghcr:
+    if: ${{ inputs.login-to-ghcr }}
     runs-on: ubuntu-latest
-    name: Build, push, deploy
+    name: Build, push, deploy with GHCR
     permissions:
       id-token: write
       contents: write
+      packages: read
     steps:
       - name: Process inputs
         id: inputs
@@ -169,4 +170,3 @@ jobs:
             • *IMAGE:* ${{ steps.version.outputs.builddate }}
           SLACK_TITLE: ':warning: :warning: WORFLOW FAILED - ${{ steps.inputs.outputs.ARGOCD_APP }}'
           SLACK_WEBHOOK: ${{ steps.inputs.outputs.SLACK_WEBHOOK_URL }}
-
