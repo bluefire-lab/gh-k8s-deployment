@@ -16,7 +16,10 @@ on:
     secrets:
       ARGOCD_TOKEN:
         required: true
-        description: 'ArgoCD token'      
+        description: 'ArgoCD token'
+      SLACK_WEBHOOK_URL:
+        required: false
+        description: 'Slack webhook URL'
 
 jobs:
   deploy-ghcr:
@@ -44,7 +47,6 @@ jobs:
           REPOSITORY_URL=${{ fromJson(inputs.config).REPOSITORY_URL }}
           DOCKER_CONTEXT=${{ fromJson(inputs.config).DOCKER_CONTEXT }}
           DOCKER_FILE=${{ fromJson(inputs.config).DOCKER_FILE }}
-          SLACK_WEBHOOK_URL=${{ fromJson(inputs.config).SLACK_WEBHOOK_URL }}
 
           # Check required values
           [ -z "$IMAGE_VALUES_REPOSITORY" ] && echo "IMAGE_VALUES_REPOSITORY is not set" && exit 1;
@@ -75,7 +77,6 @@ jobs:
           echo "REPOSITORY_URL=$REPOSITORY_URL" >> $GITHUB_OUTPUT
           echo "DOCKER_CONTEXT=$DOCKER_CONTEXT" >> $GITHUB_OUTPUT
           echo "DOCKER_FILE=$DOCKER_FILE" >> $GITHUB_OUTPUT
-          echo "SLACK_WEBHOOK_URL=$SLACK_WEBHOOK_URL" >> $GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v4        
@@ -156,7 +157,7 @@ jobs:
             • *APP:* ${{ steps.inputs.outputs.ARGOCD_APP }}
             • *IMAGE:* ${{ steps.version.outputs.builddate }}
           SLACK_TITLE: 'SUCCESSFUL ARGO APP UPDATE - ${{ steps.inputs.outputs.ARGOCD_APP }} :rocket:'
-          SLACK_WEBHOOK: ${{ steps.inputs.outputs.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Slack Notification Failure
         uses: rtCamp/action-slack-notify@v2
@@ -169,4 +170,4 @@ jobs:
             • *APP:* ${{ steps.inputs.outputs.ARGOCD_APP }}
             • *IMAGE:* ${{ steps.version.outputs.builddate }}
           SLACK_TITLE: ':warning: :warning: WORFLOW FAILED - ${{ steps.inputs.outputs.ARGOCD_APP }}'
-          SLACK_WEBHOOK: ${{ steps.inputs.outputs.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
