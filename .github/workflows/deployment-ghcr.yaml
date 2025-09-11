@@ -20,6 +20,9 @@ on:
       SLACK_WEBHOOK_URL:
         required: false
         description: 'Slack webhook URL'
+      COMPOSER_AUTH_JSON:
+        required: false
+        description: 'Composer auth.json content'
 
 jobs:
   deploy-ghcr:
