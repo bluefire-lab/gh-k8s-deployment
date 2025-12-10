@@ -22,7 +22,7 @@ on:
         description: 'Slack webhook URL'
       COMPOSER_AUTH_JSON:
         required: false
-        description: 'Composer auth.json content'        
+        description: 'Composer auth.json content'
 
 jobs:
   deploy:
@@ -49,6 +49,7 @@ jobs:
           REPOSITORY_URL=${{ fromJson(inputs.config).REPOSITORY_URL }}
           DOCKER_CONTEXT=${{ fromJson(inputs.config).DOCKER_CONTEXT }}
           DOCKER_FILE=${{ fromJson(inputs.config).DOCKER_FILE }}
+          IMAGE_TAG_PREFIX=${{ fromJson(inputs.config).IMAGE_TAG_PREFIX }}
           SLACK_WEBHOOK_URL=${{ fromJson(inputs.config).SLACK_WEBHOOK_URL }}
 
           # Check required values
@@ -66,6 +67,7 @@ jobs:
           [ -z "$IMAGE_YAML_PATH" ] && IMAGE_YAML_PATH=".image.tag"
           [ -z "$DOCKER_CONTEXT" ] && DOCKER_CONTEXT="."
           [ -z "$DOCKER_FILE" ] && DOCKER_FILE="Dockerfile"
+          [ -z "$IMAGE_TAG_PREFIX" ] && IMAGE_TAG_PREFIX=""
 
           # Set the environment variables
           echo "IMAGE_VALUES_REPOSITORY=$IMAGE_VALUES_REPOSITORY" >> $GITHUB_OUTPUT
@@ -81,6 +83,7 @@ jobs:
           echo "DOCKER_CONTEXT=$DOCKER_CONTEXT" >> $GITHUB_OUTPUT
           echo "DOCKER_FILE=$DOCKER_FILE" >> $GITHUB_OUTPUT
           echo "SLACK_WEBHOOK_URL=$SLACK_WEBHOOK_URL" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG_PREFIX=$IMAGE_TAG_PREFIX" >> $GITHUB_OUTPUT
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -121,7 +124,7 @@ jobs:
       - name: "Set build id"
         id: version  # this is used on variable path  
         run: |
-          echo "builddate=$(date +'%Y-%m-%d')-${GITHUB_RUN_ATTEMPT}-$(echo ${GITHUB_SHA::7})" >> $GITHUB_OUTPUT
+          echo "builddate=${{ steps.inputs.outputs.IMAGE_TAG_PREFIX }}$(date +'%Y-%m-%d')-${GITHUB_RUN_ATTEMPT}-$(echo ${GITHUB_SHA::7})" >> $GITHUB_OUTPUT
         
       - name: Build and push Docker images
         id: docker
@@ -181,4 +184,3 @@ jobs:
             • *IMAGE:* ${{ steps.version.outputs.builddate }}
           SLACK_TITLE: ':warning: :warning: WORFLOW FAILED - ${{ steps.inputs.outputs.ARGOCD_APP }}'
           SLACK_WEBHOOK: ${{ steps.inputs.outputs.SLACK_WEBHOOK_URL }}
-
