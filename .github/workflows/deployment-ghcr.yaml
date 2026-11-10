@@ -136,6 +136,7 @@ jobs:
           file: ${{ steps.inputs.outputs.DOCKER_FILE }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: APP_COMMIT=${{ github.sha }}
 
       - name: Update yaml and push
         uses: rusowyler/github-action-yaml-update-and-push@main
